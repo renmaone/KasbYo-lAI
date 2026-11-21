@@ -1,0 +1,21 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN corepack enable
+COPY pnpm-lock.yaml* package.json pnpm-workspace.yaml turbo.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm install --no-frozen-lockfile
+RUN pnpm --filter @kasbyol/api exec prisma generate
+RUN pnpm --filter @kasbyol/shared build && pnpm --filter @kasbyol/api build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S kasbyol && adduser -S kasbyol -G kasbyol
+COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/node_modules ./node_modules
+USER kasbyol
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://localhost:4000/api/v1/health || exit 1
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
