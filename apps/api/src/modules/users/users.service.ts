@@ -68,37 +68,117 @@ export class UsersService {
     });
   }
 
-  // Muloqot uchun foydalanuvchilarni @username, ism yoki KY-ID bo'yicha qidirish (faqat ochiq ma'lumotlar qaytadi)
+  // Muloqot uchun foydalanuvchilarni rolga qarab qidirish:
+  // - Admin: barcha foydalanuvchilarni ko'radi va qidiradi
+  // - O'qituvchi / O'quvchi: ro'yxatda faqat o'z sinfi/darsidagilarni ko'radi;
+  //   sinfdan tashqari odamni esa aniq KY-ID yoki @username orqali qidirib topadi
   async searchForChat(actorId: string, query: string) {
-    const q = String(query || "").trim().replace(/^@/, "");
-    const users = await this.prisma.user.findMany({
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { id: true, role: true },
+    });
+    if (!actor) return [];
+
+    const raw = String(query || "").trim();
+    const q = raw.replace(/^@/, "");
+    const isAdmin = actor.role === UserRole.SUPER_ADMIN || actor.role === UserRole.ADMIN;
+
+    const userSelect = {
+      id: true,
+      publicId: true,
+      username: true,
+      role: true,
+      profile: { select: { firstName: true, lastName: true, avatarUrl: true, bio: true } },
+      studentProfile: { select: { grade: true, schoolName: true, isVerified: true } },
+      teacherProfile: { select: { subjects: true, workplace: true, experienceYears: true, isVerified: true } },
+    };
+
+    // 1. Admin uchun barcha foydalanuvchilar ochiq
+    if (isAdmin) {
+      return this.prisma.user.findMany({
+        where: {
+          id: { not: actorId },
+          deletedAt: null,
+          publicId: { not: null },
+          username: { not: null },
+          ...(q
+            ? {
+                OR: [
+                  { username: { contains: q, mode: "insensitive" } },
+                  { publicId: { contains: q, mode: "insensitive" } },
+                  { profile: { firstName: { contains: q, mode: "insensitive" } } },
+                  { profile: { lastName: { contains: q, mode: "insensitive" } } },
+                ],
+              }
+            : {}),
+        },
+        select: userSelect,
+        take: 30,
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    // 2. O'qituvchi va O'quvchi uchun o'z sinfi / darsidagi foydalanuvchilar sharti
+    const classmateWhere: any = {
+      id: { not: actorId },
+      deletedAt: null,
+      publicId: { not: null },
+      username: { not: null },
+      OR: [
+        // O'qituvchining darsiga (Course) yozilgan o'quvchilar
+        { enrollments: { some: { course: { teacherId: actorId } } } },
+        // O'quvchi yozilgan darsning (Course) o'qituvchisi
+        { taughtCourses: { some: { enrollments: { some: { studentId: actorId } } } } },
+        // Bir xil darsdagi (Course) sinfdoshlar
+        { enrollments: { some: { course: { enrollments: { some: { studentId: actorId } } } } } },
+        // Sinf rahbari (Class) bo'lgan o'qituvchi va o'quvchilar
+        { classMemberships: { some: { class: { homeroomTeacherId: actorId } } } },
+        { homeroomClasses: { some: { memberships: { some: { studentId: actorId } } } } },
+        { classMemberships: { some: { class: { memberships: { some: { studentId: actorId } } } } } },
+      ],
+    };
+
+    // Agar qidiruv bo'sh bo'lsa -> faqat o'z sinfi / darsidagilar ro'yxati chiqadi
+    if (!q) {
+      return this.prisma.user.findMany({
+        where: classmateWhere,
+        select: userSelect,
+        take: 50,
+        orderBy: { createdAt: "desc" },
+      });
+    }
+
+    // Qidiruv kiritilganda:
+    // - O'z sinfidagilar orasidan ism, username yoki KY-ID bo'yicha topadi
+    // - Sinfdan tashqaridagi odamni esa FAQAT aniq KY-ID yoki aniq @username bilan topadi
+    return this.prisma.user.findMany({
       where: {
         id: { not: actorId },
-        deletedAt: null, publicId: { not: null }, username: { not: null },
-        ...(q
-          ? {
-              OR: [
-                { username: { contains: q, mode: "insensitive" } },
-                { publicId: { contains: q, mode: "insensitive" } },
-                { profile: { firstName: { contains: q, mode: "insensitive" } } },
-                { profile: { lastName: { contains: q, mode: "insensitive" } } },
-              ],
-            }
-          : {}),
+        deletedAt: null,
+        publicId: { not: null },
+        username: { not: null },
+        OR: [
+          {
+            AND: [
+              classmateWhere,
+              {
+                OR: [
+                  { username: { contains: q, mode: "insensitive" } },
+                  { publicId: { contains: q, mode: "insensitive" } },
+                  { profile: { firstName: { contains: q, mode: "insensitive" } } },
+                  { profile: { lastName: { contains: q, mode: "insensitive" } } },
+                ],
+              },
+            ],
+          },
+          { publicId: { equals: q, mode: "insensitive" } },
+          { username: { equals: q, mode: "insensitive" } },
+        ],
       },
-      select: {
-        id: true,
-        publicId: true,
-        username: true,
-        role: true,
-        profile: { select: { firstName: true, lastName: true, avatarUrl: true, bio: true } },
-        studentProfile: { select: { grade: true, schoolName: true, isVerified: true } },
-        teacherProfile: { select: { subjects: true, workplace: true, experienceYears: true, isVerified: true } },
-      },
+      select: userSelect,
       take: 25,
       orderBy: { createdAt: "desc" },
     });
-    return users;
   }
 
   async getChatConversations(userId: string) {

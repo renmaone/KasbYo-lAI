@@ -77,7 +77,11 @@ export function ChatSection({ currentUser }: { currentUser: any }) {
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="@username, ism yoki KY-ID qidirish..."
+            placeholder={
+              currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN"
+                ? "@username, ism yoki KY-ID qidirish..."
+                : "Sinfdan tashqari uchun KY-ID yoki @username..."
+            }
             className="w-full px-3.5 py-2 rounded-xl border bg-slate-50 focus:bg-white text-xs outline-none focus:border-[#5A4FE3]"
           />
         </div>
@@ -124,8 +128,21 @@ export function ChatSection({ currentUser }: { currentUser: any }) {
           {/* Barcha o'quvchi va o'qituvchilar ro'yxati */}
           <div className="p-2">
             <div className="px-2 py-1 text-[10px] font-bold uppercase text-slate-400">
-              {searchQuery ? "Qidiruv natijalari" : "O‘qituvchi va O‘quvchilar"}
+              {searchQuery
+                ? "Qidiruv natijalari"
+                : currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN"
+                ? "Barcha foydalanuvchilar"
+                : "Sinfdoshlar va Ustozlar"}
             </div>
+            {searchResults.length === 0 && (
+              <div className="px-3 py-4 text-[11px] text-slate-400 text-center">
+                {searchQuery
+                  ? "Bunday KY-ID yoki @username topilmadi"
+                  : currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN"
+                  ? "Foydalanuvchilar topilmadi"
+                  : "Sinfingizda hozircha boshqa a’zolar yo‘q. Boshqa foydalanuvchini aniq KY-ID yoki @username orqali qidiring."}
+              </div>
+            )}
             {searchResults.map((u) => (
               <button
                 key={u.id}
