@@ -147,7 +147,14 @@ export default function DashboardPage() {
                 <span className="text-[10px] text-indigo-300 uppercase tracking-widest">Kelajak Navigatori</span>
               </div>
             </div>
-            <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden text-indigo-200 text-lg">
+            <Link
+          href="/about"
+          className="flex items-center gap-3 w-full px-4 py-2.5 mb-2 rounded-xl text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 transition"
+        >
+          <span>ℹ️</span>
+          <span>Sayt haqida</span>
+        </Link>
+        <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden text-indigo-200 text-lg">
               ✕
             </button>
           </div>
